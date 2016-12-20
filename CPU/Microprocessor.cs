@@ -8,9 +8,9 @@ using System.Threading.Tasks;
 
 namespace CPU
 {
-    class Microprocessor
+    public class Microprocessor
     {
-        public readonly SortedDictionary<string, SortedDictionary<string, bool[]>> registers;
+        private SortedDictionary<string, SortedDictionary<string, bool[]>> registers;
 
         public Microprocessor()
         {
@@ -57,7 +57,7 @@ namespace CPU
                     ADD(cmdWords.Skip(1).ToArray());
                     break;
                 case "SUB":
-                    //SUB(cmdWords.Skip(1).ToArray());
+                    SUB(cmdWords.Skip(1).ToArray());
                     break;
                 default:
                     throw new NotSupportedException("Not supported command.");
@@ -114,6 +114,32 @@ namespace CPU
                 throw new FormatException("First argument is not a register nor an 8/16 bits number.");
 
             AddToRegister(sourceValue, destRegister);
+        }
+
+        private void SUB(string[] arguments)
+        {
+            if (!IsRegister(arguments[1]))
+                throw new FormatException("Register does not exist.");
+
+            if (IsRegister(arguments[0]))
+            {
+                if (!IsSameType(arguments[0], arguments[1]))
+                    throw new FormatException("Registers have different sizes.");
+            }
+            else if (!IsSameSize(arguments[0], arguments[1]))
+                throw new FormatException("Value does not match register size.");
+
+            string destRegister = arguments[1];
+            bool[] sourceValue;
+
+            if (IsRegister(arguments[0]))
+                sourceValue = GetValueFromRegister(arguments[0]);
+            else if (Regex.IsMatch(arguments[0], "^[01]+$"))
+                sourceValue = arguments[0].Select(c => c == '1').ToArray();
+            else
+                throw new FormatException("First argument is not a register nor an 8/16 bits number.");
+
+            SubFromRegister(sourceValue, destRegister);
         }
 
         private bool IsSameSize(string value, string register)
@@ -181,6 +207,39 @@ namespace CPU
             return sum.ToArray();
         }
 
+        private void SubFromRegister(bool[] value, string register)
+        {
+            if (IsGPR(register))
+            {
+                string rH = register[0] + "H";
+                string rL = register[0] + "L";
+                bool[] registerValue = registers[register][rH].Concat(registers[register][rL]).ToArray();
+                registerValue = Subtractor(value, registerValue);
+                registers[register][rH] = registerValue.Take(8).Cast<bool>().ToArray();
+                registers[register][rL] = registerValue.Skip(8).Cast<bool>().ToArray();
+            }
+            else
+            {
+                string gpr = register[0] + "X";
+                bool[] registerValue = registers[gpr][register];
+                registerValue = Subtractor(value, registerValue);
+                registers[gpr][register] = (bool[])registerValue.Clone();
+            }
+        }
+
+        private bool[] Subtractor(bool[] a, bool[] b) // b - a
+        {
+            var diff = new List<bool>(Enumerable.Repeat(false, a.Length));
+            bool borrow = false;
+            for (int i = a.Length - 1; i >= 0; i--)
+            {
+                diff[i] = (a[i] ^ b[i]) ^ borrow;
+                borrow = (borrow && !(a[i] ^ b[i])) || (a[i] && !b[i]);
+            }
+
+            return diff.ToArray();
+        }
+
         private bool[] GetValueFromRegister(string register)
         {
             if (IsGPR(register))
@@ -205,7 +264,7 @@ namespace CPU
             return register[1].Equals('X');
         }
 
-        public void PrintRegisters()
+        public void PrintRegistersToConsole()
         {
             foreach(var gpRegister in registers)
             {
@@ -220,6 +279,30 @@ namespace CPU
                 }
                 Console.WriteLine();
             }
+        }
+
+        public string PrintRegistersToString()
+        {
+            string pRegisters = "";
+            foreach (var gpRegister in registers)
+            {
+                pRegisters += string.Format("{0}:\n", gpRegister.Key);
+                foreach (var register in gpRegister.Value)
+                {
+                    pRegisters += string.Format("\t{0}:", register.Key);
+                    foreach (bool value in register.Value)
+                    {
+                        pRegisters += string.Format("{0}", value ? 1 : 0);
+                    }
+                }
+                pRegisters += "\n";
+            }
+            return pRegisters;
+        }
+
+        public void Clear()
+        {
+            registers = InitRegisters();
         }
     }
 }
