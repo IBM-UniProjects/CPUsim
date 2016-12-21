@@ -47,7 +47,10 @@ namespace CPU
         public void Command(string cmd)
         {
             string[] cmdWords = cmd.Split();
+            if (cmdWords.Length != 3)
+                throw new FormatException("Command must have exactly 2 arguments.");
             cmd = cmdWords[0];
+            
             switch (cmd)
             {
                 case "MOV":

@@ -117,4 +117,13 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
+  <data name="legendLabel.Text" xml:space="preserve">
+    <value>-Examples-
+MOV 01010101 AH; =&gt; AH = 01010101
+MOV AL AH;       =&gt; AH = AL
+ADD 01010101 AH; =&gt; AH = AH + 01010101
+ADD AL AH;       =&gt; AH = AH + AL
+SUB 01010101 AH; =&gt; AH = AH - 01010101
+SUB AL AH;       =&gt; AH = AH - AL</value>
+  </data>
 </root>
