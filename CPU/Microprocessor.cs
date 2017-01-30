@@ -47,9 +47,10 @@ namespace CPU
         public void Command(string cmd)
         {
             string[] cmdWords = cmd.Split();
-            if (cmdWords.Length != 3)
+            cmd = cmdWords[0].Substring(0, 3);
+
+            if (cmdWords.Length != 3 && cmd != "INT")
                 throw new FormatException("Command must have exactly 2 arguments.");
-            cmd = cmdWords[0];
             
             switch (cmd)
             {
@@ -61,6 +62,9 @@ namespace CPU
                     break;
                 case "SUB":
                     SUB(cmdWords.Skip(1).ToArray());
+                    break;
+                case "INT":
+                    Console.WriteLine(cmd);
                     break;
                 default:
                     throw new NotSupportedException("Not supported command.");
