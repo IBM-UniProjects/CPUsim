@@ -11,10 +11,12 @@ namespace CPU
     public class Microprocessor
     {
         private SortedDictionary<string, SortedDictionary<string, bool[]>> registers;
+        private Stack<bool[]> stack;
 
         public Microprocessor()
         {
             registers = InitRegisters();
+            stack = new Stack<bool[]>();
         }
 
         private SortedDictionary<string, SortedDictionary<string, bool[]>> InitRegisters()
@@ -74,28 +76,42 @@ namespace CPU
         private void INT(string interrupt) {
             switch (interrupt)
             {
-                case "INT1":
-                    int n = RegToInt("AH");
-                    Console.WriteLine(n);
-                    bool[] reg = IntToReg(n);
-                    for (int i = 0; i < reg.Length; i++)
-                    {
-                        Console.Write(reg[i] ? 1 : 0);
-                    }
-                    Console.WriteLine();
+                //case "INT1":
+                //    int n = RegToInt("AH");
+                //    Console.WriteLine(n);
+                //    bool[] reg = IntToReg(n);
+                //    for (int i = 0; i < reg.Length; i++)
+                //    {
+                //        Console.Write(reg[i] ? 1 : 0);
+                //    }
+                //    Console.WriteLine();
+                //    break;
+                case "INT32":
+                    INT32();
                     break;
                 case "INT33":
                     INT33();
+                    break;
+                case "INT51":
+                    INT51();
                     break;
                 default:
                     throw new NotSupportedException(String.Format("Not supported interrupt {0}.", interrupt));
             }
         }
 
+        private void INT32()
+        {
+            /* Exit to operating system
+             */
+            System.Windows.Forms.Application.Exit();
+        }
+
         private void INT33()
         {
             int AH = RegToInt("AH");
             int AL;
+            int CX;
             int CH;
             int CL;
             int DH;
@@ -129,10 +145,25 @@ namespace CPU
                         AL = DL;
                     registers["AX"]["AL"] = IntToReg(AL);
                     break;
+                case 42:
+                    /* AH = 2Ah
+                     * Get system date
+                     * Return: CX = year, DH = month, DL = day
+                     */
+                    DateTime date = DateTime.Now;
+                    CX = date.Year;
+                    DH = date.Month;
+                    DL = date.Day;
+                    Console.WriteLine(date.ToString("dd.MM.yyyy"));
+                    registers["CX"]["CH"] = BigIntToReg(CX).Take(8).Cast<bool>().ToArray();
+                    registers["CX"]["CL"] = BigIntToReg(CX).Skip(8).Cast<bool>().ToArray();
+                    registers["DX"]["DH"] = IntToReg(DH);
+                    registers["DX"]["DL"] = IntToReg(DL);
+                    break;
                 case 44:
                     /* AH = 2Ch
                      * Get system time
-                     * Return: CH: hour, CL: minute, DH: second, DL: 1/100 second
+                     * Return: CH = hour, CL = minute, DH = second, DL = 1/100 second
                      */
                     DateTime time = DateTime.Now;
                     CH = time.Hour;
@@ -150,10 +181,84 @@ namespace CPU
             }
         }
 
+        private void INT51()
+        {
+            int AH = RegToInt("AH");
+            int CX;
+            int DX;
+            switch (AH)
+            {
+                case 3:
+                    /* AH = 03h
+                     * Get mouse position
+                     * Return: CX = X, DX = Y
+                     */
+                    CX = System.Windows.Forms.Cursor.Position.X;
+                    DX = System.Windows.Forms.Cursor.Position.Y;
+                    Console.WriteLine(CX);
+                    Console.WriteLine(DX);
+                    registers["CX"]["CH"] = BigIntToReg(CX).Take(8).Cast<bool>().ToArray();
+                    registers["CX"]["CL"] = BigIntToReg(CX).Skip(8).Cast<bool>().ToArray();
+                    registers["DX"]["DH"] = BigIntToReg(DX).Take(8).Cast<bool>().ToArray();
+                    registers["DX"]["DL"] = BigIntToReg(DX).Skip(8).Cast<bool>().ToArray();
+                    break;
+                case 4:
+                    /* AH = 04h
+                     * Set mouse position
+                     * Entry: CX = new X, DX = new Y
+                     */
+                    CX = BigRegToInt("CX");
+                    DX = BigRegToInt("DX");
+                    Console.WriteLine(CX);
+                    Console.WriteLine(DX);
+                    int maxX = System.Windows.Forms.Screen.PrimaryScreen.Bounds.Width;
+                    int maxY = System.Windows.Forms.Screen.PrimaryScreen.Bounds.Height;
+                    if (CX > maxX)
+                        CX = maxX;
+                    if (DX > maxY)
+                        DX = maxY;
+                    System.Windows.Forms.Cursor.Position = new System.Drawing.Point(CX, DX);
+                    break;
+                default:
+                    throw new NotSupportedException(String.Format("Not supported interrupt INT51, AH = {0}.", AH));
+            }
+        }
+
         private void FlushStdin()
         {
             while (Console.KeyAvailable)
                 Console.ReadKey(true);
+        }
+
+        private int BigRegToInt(string register)
+        {
+            bool[] reg;
+            int n = 0;
+
+            if (!IsGPR(register))
+                throw new FormatException("8-bit register not supported.");
+            
+            reg = GetValueFromRegister(register);
+
+            for (int i = 0; i < reg.Length; i++)
+            {
+                n = (n << 1) + (reg[i] ? 1 : 0);
+            }
+
+            return n;
+        }
+
+        private bool[] BigIntToReg(int n)
+        {
+            if (n > 65535)
+                throw new FormatException("Max 16-bit number.");
+
+            bool[] reg = new bool[16];
+            for (int i = 0; i < 16; i++)
+            {
+                reg[15 - i] = (1 << i & n) != 0;
+            }
+            return reg;
         }
 
         private int RegToInt(string register)
@@ -188,8 +293,32 @@ namespace CPU
             return reg;
         }
 
+        private void STACK(string[] arguments)
+        {
+            if (arguments[0].Equals("STACK"))
+            {
+                bool[] value = stack.Pop();
+                string bits = "";
+                for (int i = 0; i < value.Length; i++)
+                {
+                    bits += value[i] ? 1 : 0;
+                }
+                MOV(new string[] {bits, arguments[1]});
+            }
+            else if(arguments[1].Equals("STACK"))
+            {
+                stack.Push((bool[]) GetValueFromRegister(arguments[0]).Clone());
+            }
+        }
+
         private void MOV(string[] arguments)
         {
+            if (arguments.Contains("STACK"))
+            {
+                STACK(arguments);
+                return;
+            }
+
             if (!IsRegister(arguments[1]))
                 throw new FormatException("Register does not exist.");
 
@@ -368,7 +497,7 @@ namespace CPU
         {
             if (IsGPR(register))
             {
-                return (bool[]) registers[register][register[0] + "H"].Concat(registers[register][register[0] + "L"]);
+                return (bool[]) registers[register][register[0] + "H"].Concat(registers[register][register[0] + "L"]).ToArray();
             }
             else
             {
