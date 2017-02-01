@@ -555,7 +555,9 @@ namespace CPU
 
         public void Clear()
         {
+            Console.WriteLine("Executing: CLEAR");
             registers = InitRegisters();
+            stack.Clear();
         }
     }
 }
